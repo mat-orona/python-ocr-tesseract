@@ -14,6 +14,11 @@ Herramienta básica de reconocimiento óptico de caracteres (OCR) desarrollada e
 - pytesseract
 - Pillow
 
+## Requisitos de entrada
+- Imágenes claras y legibles
+- Texto con buen contraste
+- Preferentemente documentos escaneados
+
 ## Uso
 ```bash
 python main.py
