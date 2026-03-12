@@ -1,28 +1,35 @@
 import pytesseract
 from PIL import Image
-from image_processing import preprocess_image
-
+from fields_map.ini_form import FORMULARIOS
+import csv
+import io
 def exe():
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
-
-def ocr_recognition(filename, lang="spa+eng"):
+#nuevo motor de OCR con Fields o cuadros preseleccionados para distintos formularios
+def ocr_by_fields(filename, fields, lang="spa"):
     img = Image.open(filename)
-    img_proc = preprocess_image(img)
-    
-    bbox_data = pytesseract.image_to_data(
-    img_proc,
-    lang=lang,
-    config="--oem 3 --psm 6",
-    output_type=pytesseract.Output.DICT)
-    
-    text_data = pytesseract.image_to_string(img, lang=lang)
-    filas = text_data.splitlines()
-    csv_data = [fila.split() for fila in filas]
-    
-    info_data = pytesseract.image_to_data(img, lang=lang)
-    
-    #bbox_data = pytesseract.image_to_data(img,output_type=pytesseract.Output.DICT)
-    
-    print("=== TEXTO DETECTADO ===")
-    return text_data,csv_data,info_data,bbox_data
+    results = {}
+
+    for field_name, (x, y, w, h) in fields.items():
+        region = img.crop((x, y, x + w, y + h))
+
+        text = pytesseract.image_to_string(
+            region,
+            lang=lang,
+            config="--psm 7 --oem 3"
+        ).strip()
+
+        results[field_name] = text
+
+    return results
+
+def forms_to_csv_string(forms_data):
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    writer.writerow(["campo", "valor"])
+    for campo, valor in forms_data.items():
+        writer.writerow([campo, valor])
+
+    return output.getvalue()

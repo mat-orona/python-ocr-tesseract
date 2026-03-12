@@ -1,10 +1,10 @@
 import tkinter as tk
-
+from PIL import ImageDraw
 # Importa herramientas para abrir archivos y mostrar mensajes
 from tkinter import filedialog, messagebox
-
+from fields_map.ini_form import FORMULARIOS
 # Importa la función OCR desde el archivo function.py
-from function import ocr_recognition
+from function import *
 from PIL import Image, ImageTk , ImageDraw
 
 
@@ -15,10 +15,11 @@ IDIOMAS = {
     "Francés": "fra"
 }
 info_data = None
-bbox_data = None
 img_original = None
 img_actual = None
-bbox_data = None
+mostrar_campos = False
+fields_activos = None
+
 # Función principal que inicia la interfaz gráfica
 def ini_gui():
 
@@ -26,13 +27,12 @@ def ini_gui():
         global img_actual, img_original, img_tk
 
         img_original = Image.open(ruta)  
-        img_actual = img_original.copy()  
-
+        img_actual = img_original.copy()
         img_actual.thumbnail((600, 600))
         img_tk = ImageTk.PhotoImage(img_actual)
-
+    
         img_label.configure(image=img_tk)
-        img_label.image = img_tk
+        img_label.image = img_tk  
         
     def seleccionar_imagen():
         # Abre un cuadro de diálogo para seleccionar archivos
@@ -48,10 +48,12 @@ def ini_gui():
         # Si el usuario selecciona un archivo, se guarda la ruta
         if archivo:
             ruta_var.set(archivo)
-
     # Función que ejecuta el OCR sobre la imagen seleccionada
     def ejecutar_ocr():
-        global info_data,bbox_data
+        global info_data, fields_activos
+        
+        fields_activos = FORMULARIOS[doc_var.get()]
+        
         # Obtiene la ruta del archivo ingresada
         ruta = ruta_var.get().strip()
         # Verifica que se haya seleccionado un archivo
@@ -64,27 +66,26 @@ def ini_gui():
         lang_var = tk.StringVar(value="Español")
         lang = IDIOMAS[lang_var.get()]
         try:
-            # Ejecuta la función OCR
-            text_data, csv_data , info_data , bbox_data = ocr_recognition(ruta, lang)
-
+            forms_data = ocr_by_fields(ruta, fields_activos)
+      
         except Exception as e:
             # Muestra un mensaje de error si falla el OCR
             messagebox.showerror("Error", f"No se pudo procesar el archivo:\n{e}")
             return
+
+        text_csv_data = forms_to_csv_string(forms_data)
         
         # Limpia el área de texto
-        res_text_data.delete("1.0", tk.END)
-
-        # Inserta el texto reconocido en la interfaz
-        res_text_data.insert(tk.END, text_data)
-        
-        # csv
         res_text_csv_data.delete("1.0", tk.END)
-        for fila in csv_data:
-            res_text_csv_data.insert(tk.END, ",".join(fila))
-        # cargar img
-        cargar_imagen(ruta)
+        # el resultado del texto lo pone dentro de la interfaz
+        res_text_csv_data.insert(tk.END, text_csv_data)
         
+        res_forms_data.delete("1.0", tk.END)
+        for campo, valor in forms_data.items():
+            res_forms_data.insert(tk.END, f"{campo}: {valor}\n")
+        # cargar img
+        cargar_imagen(ruta)     
+             
     def info_data_v(info_data):
         if info_data is None:
             messagebox.showwarning(
@@ -113,42 +114,33 @@ def ini_gui():
 
         res_text_info_data.configure(yscrollcommand=scroll.set)
 
-        res_text_info_data.insert(tk.END, info_data)
-  
-    def dibujar_bounding_boxes(img, data):
-        if data is None:
-            return img  # no hay OCR todavía
+        res_text_info_data.insert(tk.END, info_data)      
+
+    def draw_fields(img, fields):
         draw = ImageDraw.Draw(img)
-        n = len(data["text"])
-        for i in range(n):
-            if data["text"][i].strip() and int(data["conf"][i]) > 0:
-                x = data["left"][i]
-                y = data["top"][i]
-                w = data["width"][i]
-                h = data["height"][i]
-
-                draw.rectangle(
-                    [(x, y), (x + w, y + h)],
-                    outline="red",
-                    width=2
-                )
-        return img       
-    def mostrar_bounding_boxes():
-        global img_actual, img_tk
-
-        if bbox_data is None:
-            messagebox.showwarning("OCR", "Primero ejecutá el OCR")
+        for name, (x, y, w, h) in fields.items():
+            draw.rectangle([(x, y), (x + w, y + h)], outline="blue", width=2)
+            draw.text((x, y - 12), name, fill="blue")
+        return img
+    def toggle_campos():
+        global mostrar_campos, img_actual, img_tk
+        if img_actual == None:
+            messagebox.showwarning("Falta archivo", "Seleccioná archivo primero.")
             return
+        mostrar_campos = not mostrar_campos
 
-        img_actual = dibujar_bounding_boxes(img_original.copy(), bbox_data)
+        if mostrar_campos:
+            img_actual = draw_fields(img_original.copy(), fields_activos)
+        else:
+            img_actual = img_original.copy()
+
         img_actual.thumbnail((600, 600))
-
         img_tk = ImageTk.PhotoImage(img_actual)
         img_label.configure(image=img_tk)
         img_label.image = img_tk
-            
-        
-        
+    
+    
+    
     #===== GUI =====
     # Crea la ventana principal
     ventana = tk.Tk()
@@ -201,12 +193,16 @@ def ini_gui():
 
     # Botón para ejecutar el OCR
     tk.Button(top, text="Procesar OCR", command=ejecutar_ocr).grid(row=1, column=2, pady=(10, 0))
-    
+    tk.Label(top, text="Tipo de documento:").grid(row=3, column=0, sticky="w")
+
+    doc_var = tk.StringVar(value="DNI")
+
+    doc_menu = tk.OptionMenu(top,doc_var,*FORMULARIOS.keys())
+    doc_menu.grid(row=3, column=1, sticky="w")
     
     tk.Button(top,text="Ver info OCR",command=lambda: info_data_v(info_data)).grid(row=2, column=2, pady=10)
 
-    
-    tk.Button(top,text="Ver detecciones",command=mostrar_bounding_boxes).grid(row=2, column=1, pady=10)
+    tk.Button(top,text="Mostrar / Ocultar campos",command=toggle_campos).grid(row=2, column=1, pady=10)
     
 
     # ===== FRAME CENTRAL (RESULTADO OCR) =====
@@ -222,19 +218,19 @@ def ini_gui():
     mid.rowconfigure(0, weight=1)
 
     # Área de texto donde se muestra el resultado OCR
-    res_text_data = tk.Text(mid, wrap="word")
+    res_forms_data = tk.Text(mid, wrap="word")
 
     # Ubica el área de texto
-    res_text_data.grid(row=0, column=0, sticky="nsew")
+    res_forms_data.grid(row=0, column=0, sticky="nsew")
 
     # Barra de desplazamiento vertical
-    scroll = tk.Scrollbar(mid, command=res_text_data.yview)
+    scroll = tk.Scrollbar(mid, command=res_forms_data.yview)
 
     # Ubica la barra de desplazamiento
     scroll.grid(row=0, column=1, sticky="ns")
 
     # Conecta el scroll con el área de texto
-    res_text_data.configure(yscrollcommand=scroll.set)
+    res_forms_data.configure(yscrollcommand=scroll.set)
     
     # ===== FRAME CSV =====
     csv_frame = tk.Frame(ventana, padx=12)
@@ -260,7 +256,6 @@ def ini_gui():
     img_label = tk.Label(img_frame, image=img_tk)
     img_label.image = img_tk
     img_label.pack(expand=True)
-
 
     # Ícono de barra de tareas
     icono_png = tk.PhotoImage(file="icon.png")
