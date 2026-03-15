@@ -1,8 +1,7 @@
 import pytesseract
 from PIL import Image
-from fields_map.ini_form import FORMULARIOS
-import csv
-import io
+from PIL import Image
+
 def exe():
     pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
@@ -21,15 +20,5 @@ def ocr_by_fields(filename, fields, lang="spa"):
         ).strip()
 
         results[field_name] = text
-
+    
     return results
-
-def forms_to_csv_string(forms_data):
-    output = io.StringIO()
-    writer = csv.writer(output)
-
-    writer.writerow(["campo", "valor"])
-    for campo, valor in forms_data.items():
-        writer.writerow([campo, valor])
-
-    return output.getvalue()
